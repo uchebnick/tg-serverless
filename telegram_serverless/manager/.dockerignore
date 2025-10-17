@@ -1,0 +1,8 @@
+**/.git
+**/.gitignore
+**/.idea
+**/.vscode
+**/k8s
+**/*.md
+**/Dockerfile
+**/.dockerignore

@@ -1,0 +1,162 @@
+# Default values for tg-bot-serverless.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# Global settings for the chart
+global:
+  namespace: telegram-serverless
+  redis:
+    host: "redis-service"
+    port: 6379
+  kafka:
+    brokers: "kafka-service:9092"
+
+manager:
+  # This will set the replicaset count more information can be found here: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
+  replicaCount: 1
+  image:
+    repository: manager
+    # This sets the pull policy for images.
+    pullPolicy: IfNotPresent
+    # Overrides the image tag whose default is the chart appVersion.
+    tag: latest
+  service:
+    # This sets the service type more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types
+    type: ClusterIP
+    # This sets the ports more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#field-spec-ports
+    port: 8080
+  metrics:
+    port: 9090
+  config:
+    port: "8080"
+    redis_db: "0"
+    gateway_url: "https://{{ .Values.ingress.host }}"
+    worker_namespace: "telegram-serverless"
+    log_level: "info"
+    sidecar_image: "tg_proxy:latest"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  serviceAccount:
+    create: true
+    name: "manager-sa"
+
+tgGateway:
+  # This will set the replicaset count more information can be found here: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
+  replicaCount: 2
+  image:
+    repository: tg_gateway
+    # This sets the pull policy for images.
+    pullPolicy: IfNotPresent
+    # Overrides the image tag whose default is the chart appVersion.
+    tag: latest
+  service:
+    # This sets the service type more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types
+    type: ClusterIP
+    # This sets the ports more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#field-spec-ports
+    port: 80
+    targetPort: 8080
+  metrics:
+    port: 9090
+  config:
+    port: "8080"
+    redis_db: "0"
+    telegram_api_url: "https://api.telegram.org"
+    log_level: "info"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+redis:
+  # This will set the replicaset count more information can be found here: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
+  replicaCount: 1
+  image:
+    repository: redis
+    # This sets the pull policy for images.
+    pullPolicy: IfNotPresent
+    # Overrides the image tag whose default is the chart appVersion.
+    tag: 7-alpine
+  service:
+    # This sets the service type more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types
+    type: ClusterIP
+    # This sets the ports more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#field-spec-ports
+    port: 6379
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+zookeeper:
+  # This will set the replicaset count more information can be found here: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
+  replicaCount: 1
+  image:
+    repository: confluentinc/cp-zookeeper
+    # Overrides the image tag whose default is the chart appVersion.
+    tag: 7.5.0
+    # This sets the pull policy for images.
+    pullPolicy: IfNotPresent
+  service:
+    clientPort: 2181
+    serverPort: 2888
+    leaderElectionPort: 3888
+  config:
+    client_port: "2181"
+    tick_time: "2000"
+    server_id: "1"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+kafka:
+  # This will set the replicaset count more information can be found here: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
+  replicaCount: 1
+  image:
+    repository: confluentinc/cp-kafka
+    # Overrides the image tag whose default is the chart appVersion.
+    tag: 7.5.0
+    # This sets the pull policy for images.
+    pullPolicy: IfNotPresent
+  service:
+    # This sets the ports more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#field-spec-ports
+    port: 9092
+  config:
+    broker_id: "1"
+    zookeeper_connect: "zookeeper-service:2181"
+    advertised_listeners: "PLAINTEXT://kafka-service:9092"
+    offsets_topic_replication_factor: "1"
+    transaction_state_log_replication_factor: "1"
+    transaction_state_log_min_isr: "1"
+    auto_create_topics_enable: "true"
+    delete_topic_enable: "true"
+    log_retention_hours: "168"
+    log_segment_bytes: "1073741824"
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+
+ingress:
+  enabled: true
+  host: "your-domain.com" # <-- Замените на ваш домен
+  tls:
+    enabled: true
+    secretName: "your-tls-secret" # <-- Замените на имя вашего секрета TLS
+    caSecretName: "your-ca-secret" # <-- Необязательно: имя секрета с CA для самоподписанных сертификатов
