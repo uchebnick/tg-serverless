@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-deployment
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: redis
+    component: storage
+    {{- include "tg-bot-serverless.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.redis.replicaCount }}
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+      - name: redis
+        image: "{{ .Values.redis.image.repository }}:{{ .Values.redis.image.tag }}"
+        imagePullPolicy: {{ .Values.redis.image.pullPolicy }}
+        ports:
+        - containerPort: {{ .Values.redis.service.port }}
+        resources:
+          {{- toYaml .Values.redis.resources | nindent 12 }}
+

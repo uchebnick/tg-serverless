@@ -11,5 +11,5 @@ spec:
     - name: wget
       image: busybox
       command: ['wget']
-      args: ['{{ include "tg-bot-serverless.fullname" . }}:{{ .Values.service.port }}']
+      args: ['{{ include "tg-bot-serverless.fullname" . }}-tg-gateway:{{ .Values.tgGateway.service.port }}']
   restartPolicy: Never

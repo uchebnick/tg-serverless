@@ -1,96 +1,92 @@
+# 1. Ваш StatefulSet (без изменений, он в порядке)
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: kafka
-  namespace: telegram-serverless
+  namespace: {{ .Release.Namespace }}
   labels:
-    app: kafka
-    component: messaging
+    app: kafka-app
 spec:
-  serviceName: kafka
-  replicas: 1
+  serviceName: kafka-svc # <-- Указывает на "безголовый" сервис
+  replicas: {{ .Values.kafka.replicas }}
   selector:
     matchLabels:
-      app: kafka
+      app: kafka-app
   template:
     metadata:
       labels:
-        app: kafka
-        component: messaging
+        app: kafka-app
     spec:
       containers:
-      - name: kafka
-        image: confluentinc/cp-kafka:7.5.0
-        ports:
-        - name: kafka
-          containerPort: 9092
-          protocol: TCP
-        - name: kafka-internal
-          containerPort: 9093
-          protocol: TCP
-        env:
-        - name: KAFKA_BROKER_ID
-          value: "1"
-        - name: KAFKA_ZOOKEEPER_CONNECT
-          value: "zookeeper-service:2181"
-        - name: KAFKA_ADVERTISED_LISTENERS
-          value: "PLAINTEXT://kafka-service:9092"
-        - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
-          value: "PLAINTEXT:PLAINTEXT"
-        - name: KAFKA_INTER_BROKER_LISTENER_NAME
-          value: "PLAINTEXT"
-        - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
-          value: "1"
-        - name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
-          value: "1"
-        - name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR
-          value: "1"
-        - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
-          value: "true"
-        - name: KAFKA_DELETE_TOPIC_ENABLE
-          value: "true"
-        - name: KAFKA_LOG_RETENTION_HOURS
-          value: "168"
-        - name: KAFKA_LOG_SEGMENT_BYTES
-          value: "1073741824"
+        - name: kafka-container
+          image: doughgle/kafka-kraft
+          ports:
+            - containerPort: 9092 # Клиентский порт
+            - containerPort: 9093 # Порт репликации/контроллера
+          env:
+            - name: REPLICAS
+              value: {{ .Values.kafka.replicas | quote }}
+            - name: SERVICE
+              value: kafka-svc # Имя "безголового" сервиса
+            - name: NAMESPACE
+              value: {{ .Release.Namespace }}
+            - name: SHARE_DIR
+              value: /mnt/kafka
+            - name: CLUSTER_ID
+              value: {{ .Values.kafka.clusterId | quote }}
+            - name: DEFAULT_REPLICATION_FACTOR
+              value: {{ .Values.kafka.replicas | quote }}
+            - name: DEFAULT_MIN_INSYNC_REPLICAS
+              value: {{ sub .Values.kafka.replicas 1 | max 1 | quote }}
+          volumeMounts:
+            - name: data
+              mountPath: /mnt/kafka
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
         resources:
           requests:
-            cpu: 200m
-            memory: 512Mi
-          limits:
-            cpu: 1000m
-            memory: 2Gi
-        volumeMounts:
-        - name: kafka-data
-          mountPath: /var/lib/kafka/data
-        livenessProbe:
-          tcpSocket:
-            port: 9092
-          initialDelaySeconds: 30
-          periodSeconds: 10
-        readinessProbe:
-          tcpSocket:
-            port: 9092
-          initialDelaySeconds: 20
-          periodSeconds: 10
-      volumes:
-      - name: kafka-data
-        emptyDir: {}
+            storage: {{ .Values.kafka.storage | quote }}
+---
+# 2. "Безголовый" (Headless) сервис (ЭТО ИСПРАВЛЕНИЕ)
+# Он нужен для стабильных DNS-имен (pod-0.kafka-svc...)
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-svc # <-- Имя совпадает с 'serviceName' в StatefulSet
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: kafka-app
+spec:
+  clusterIP: None # <-- 'None' делает этот сервис "безголовым"
+  ports:
+    - name: '9092'
+      port: 9092
+      targetPort: 9092
+    - name: '9093' # Важно также открыть порт контроллера
+      port: 9093
+      targetPort: 9093
+  selector:
+    app: kafka-app
+---
+# 3. Клиентский сервис (ВАШ NodePort)
+# Используйте его для подключения ваших приложений
 apiVersion: v1
 kind: Service
 metadata:
   name: kafka-service
-  namespace: telegram-serverless
+  namespace: {{ .Release.Namespace }}
   labels:
-    app: kafka
-    component: messaging
+    app: kafka-app
 spec:
-  type: ClusterIP
-  selector:
-    app: kafka
+  type: NodePort
   ports:
-  - name: kafka
-    port: 9092
-    targetPort: 9092
-    protocol: TCP
-
+    - name: '9092'
+      port: 9092
+      protocol: TCP
+      targetPort: 9092
+  selector:
+    app: kafka-app
